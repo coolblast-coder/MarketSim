@@ -57,7 +57,6 @@ export default function NeonButton({
           {
             transform: [{ scale: scaleAnim }],
             opacity: disabled ? 0.4 : 1,
-            shadowColor: color,
             ...Shadows.neonCyan,
             shadowColor: color,
           },
