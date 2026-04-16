@@ -8,6 +8,7 @@ import {
   Alert,
   Dimensions,
   TouchableOpacity,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
@@ -178,6 +179,7 @@ export default function StockDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [selectedRange, setSelectedRange] = useState<TimeRangeKey>('1M');
   const [chartLoading, setChartLoading] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
 
   const stockInfo = WATCHLIST_SYMBOLS.find(s => s.symbol === symbol);
 
@@ -224,11 +226,7 @@ export default function StockDetailScreen() {
   const isPositive = (quote?.d || 0) >= 0;
   const changeColor = isPositive ? Colors.positive : Colors.negative;
 
-  const handleTrade = async () => {
-    if (sharesNum <= 0) {
-      Alert.alert('Invalid', 'Enter a valid number of shares');
-      return;
-    }
+  const executeTrade = async () => {
     setLoading(true);
 
     const result = mode === 'BUY'
@@ -236,17 +234,21 @@ export default function StockDetailScreen() {
       : await executeSell(symbol!, sharesNum, price);
 
     setLoading(false);
+    setConfirmModalVisible(false);
 
     if (result.success) {
-      Alert.alert('✅ Trade Executed', result.message, [
-        {
-          text: 'OK',
-          onPress: () => loadData(),
-        },
-      ]);
+      router.push('/(tabs)/');
     } else {
       Alert.alert('❌ Trade Failed', result.message);
     }
+  };
+
+  const handleTrade = () => {
+    if (sharesNum <= 0) {
+      Alert.alert('Invalid', 'Enter a valid number of shares');
+      return;
+    }
+    setConfirmModalVisible(true);
   };
 
   if (!quote) {
@@ -505,11 +507,75 @@ export default function StockDetailScreen() {
           />
         </GlassCard>
       </ScrollView>
+
+      {/* Confirmation Modal */}
+      <Modal
+        visible={confirmModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.modalCard} neonBorder neonColor={mode === 'BUY' ? Colors.neonGreen : Colors.negative}>
+            <Text style={styles.modalTitle}>Confirm Trade</Text>
+            <Text style={styles.modalText}>
+              Are you sure you want to {mode.toLowerCase()} {sharesNum} share(s) of {symbol} for a total of <Text style={{ color: Colors.textPrimary, fontWeight: 'bold' }}>${estimatedTotal.toFixed(2)}</Text>?
+            </Text>
+            <View style={styles.modalActions}>
+              <View style={{ flex: 1 }}>
+                <NeonButton 
+                  title="Cancel" 
+                  variant="outline" 
+                  color={Colors.textSecondary} 
+                  onPress={() => setConfirmModalVisible(false)} 
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <NeonButton 
+                  title="Confirm" 
+                  color={mode === 'BUY' ? Colors.neonGreen : Colors.negative} 
+                  onPress={executeTrade} 
+                  disabled={loading}
+                />
+              </View>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    padding: Spacing.xl,
+  },
+  modalTitle: {
+    fontSize: FontSize.xl,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
   container: {
     flex: 1,
   },
