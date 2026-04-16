@@ -14,8 +14,8 @@ import { router } from 'expo-router';
 import { Colors, FontSize, Spacing, Shadows } from '../constants/theme';
 import GlassCard from '../components/GlassCard';
 import NeonButton from '../components/NeonButton';
-import { saveUserProfile, setBalance, getUserProfile, resetAllData } from '../services/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { saveUserProfile, setBalance } from '../services/storage';
+import { supabase } from '../services/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -80,10 +80,13 @@ function Particle({ delay, size, x, duration }: {
 }
 
 export default function LoginScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [balance, setBalanceInput] = useState('10000');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true);
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(40)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -110,7 +113,15 @@ export default function LoginScreen() {
     ]).start();
   }, []);
 
-  const handleLogin = async () => {
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('Email and password are required');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
     if (!username.trim()) {
       setError('Enter a trader name');
       return;
@@ -130,16 +141,52 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      const existing = await getUserProfile();
-      
-      if (existing && existing.username.toLowerCase() === username.trim().toLowerCase()) {
-        // Existing user: Do not overwrite balance or profile
-        await AsyncStorage.setItem('@marketsim_logged_in', 'true');
-      } else {
-        // New user: Wipe old data, create fresh profile, set starting balance
-        await resetAllData();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+
+      // If Supabase has email confirmation disabled, session is available immediately
+      if (data.session) {
         await saveUserProfile(username.trim());
         await setBalance(balanceNum);
+        router.replace('/(tabs)');
+      } else {
+        // Email confirmation is enabled – tell user to check inbox
+        setError('Check your email for a confirmation link, then sign in.');
+        setLoading(false);
+      }
+    } catch (e) {
+      setError('Something went wrong. Try again.');
+      setLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('Email and password are required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
       }
 
       router.replace('/(tabs)');
@@ -189,58 +236,115 @@ export default function LoginScreen() {
           }}
         >
           <GlassCard neonBorder style={styles.card}>
-            <Text style={styles.cardTitle}>Enter the Market</Text>
-            <Text style={styles.cardSub}>Choose your trader name and starting capital</Text>
+            <Text style={styles.cardTitle}>
+              {isSignUp ? 'Create Account' : 'Welcome Back'}
+            </Text>
+            <Text style={styles.cardSub}>
+              {isSignUp
+                ? 'Sign up to start trading with virtual money'
+                : 'Sign in to access your portfolio'}
+            </Text>
 
-            {/* Username */}
+            {/* Email */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Trader Name</Text>
+              <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
-                value={username}
-                onChangeText={setUsername}
-                placeholder="e.g. WolfOfWallSt"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="none"
-                maxLength={20}
+                keyboardType="email-address"
               />
             </View>
 
-            {/* Balance */}
+            {/* Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Starting Balance ($)</Text>
+              <Text style={styles.label}>Password</Text>
               <TextInput
                 style={styles.input}
-                value={balance}
-                onChangeText={setBalanceInput}
-                placeholder="10000"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Min 6 characters"
                 placeholderTextColor={Colors.textMuted}
-                keyboardType="numeric"
+                secureTextEntry
               />
-              <View style={styles.presets}>
-                {['1000', '10000', '50000', '100000'].map(val => (
-                  <Text
-                    key={val}
-                    style={[
-                      styles.preset,
-                      balance === val && styles.presetActive,
-                    ]}
-                    onPress={() => setBalanceInput(val)}
-                  >
-                    ${Number(val).toLocaleString()}
-                  </Text>
-                ))}
-              </View>
             </View>
+
+            {/* Sign-up only fields */}
+            {isSignUp && (
+              <>
+                {/* Username */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Trader Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={username}
+                    onChangeText={setUsername}
+                    placeholder="e.g. WolfOfWallSt"
+                    placeholderTextColor={Colors.textMuted}
+                    autoCapitalize="none"
+                    maxLength={20}
+                  />
+                </View>
+
+                {/* Balance */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Starting Balance ($)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={balance}
+                    onChangeText={setBalanceInput}
+                    placeholder="10000"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <View style={styles.presets}>
+                    {['1000', '10000', '50000', '100000'].map(val => (
+                      <Text
+                        key={val}
+                        style={[
+                          styles.preset,
+                          balance === val && styles.presetActive,
+                        ]}
+                        onPress={() => setBalanceInput(val)}
+                      >
+                        ${Number(val).toLocaleString()}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <NeonButton
-              title={loading ? 'Entering...' : '🚀 Start Trading'}
-              onPress={handleLogin}
+              title={
+                loading
+                  ? 'Please wait...'
+                  : isSignUp
+                  ? '🚀 Create Account'
+                  : '🔑 Sign In'
+              }
+              onPress={isSignUp ? handleSignUp : handleSignIn}
               disabled={loading}
               style={{ marginTop: Spacing.md }}
             />
+
+            {/* Toggle sign-up / sign-in */}
+            <Text
+              style={styles.toggleText}
+              onPress={() => {
+                setIsSignUp(!isSignUp);
+                setError('');
+              }}
+            >
+              {isSignUp
+                ? 'Already have an account? Sign In'
+                : "Don't have an account? Sign Up"}
+            </Text>
           </GlassCard>
         </Animated.View>
 
@@ -339,6 +443,13 @@ const styles = StyleSheet.create({
     color: Colors.negative,
     fontSize: FontSize.sm,
     marginTop: 4,
+  },
+  toggleText: {
+    marginTop: Spacing.lg,
+    textAlign: 'center',
+    color: Colors.neonCyan,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
   },
   footer: {
     marginTop: Spacing.xl,

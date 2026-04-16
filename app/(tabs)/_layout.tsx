@@ -4,7 +4,7 @@ import { Tabs, router } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
-import { isLoggedIn } from '../../services/storage';
+import { supabase } from '../../services/supabase';
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -21,8 +21,8 @@ export default function TabLayout() {
   }, []);
 
   async function checkAuth() {
-    const loggedIn = await isLoggedIn();
-    if (!loggedIn) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       router.replace('/login');
     }
     setChecking(false);

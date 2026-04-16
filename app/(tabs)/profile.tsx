@@ -23,9 +23,11 @@ import {
   updateBalance,
   UserProfile,
 } from '../../services/storage';
+import { supabase } from '../../services/supabase';
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [email, setEmail] = useState('');
   const [balance, setBalance] = useState(0);
   const [tradeCount, setTradeCount] = useState(0);
   const [posCount, setPosCount] = useState(0);
@@ -49,6 +51,12 @@ export default function ProfileScreen() {
     setBalance(bal);
     setTradeCount(txs.length);
     setPosCount(positions.length);
+
+    // Get email from Supabase session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.email) {
+      setEmail(session.user.email);
+    }
   }
 
   function getInitials(name: string): string {
@@ -156,6 +164,7 @@ export default function ProfileScreen() {
             </Text>
           </View>
           <Text style={styles.username}>{profile.username}</Text>
+          {email ? <Text style={styles.emailText}>{email}</Text> : null}
           <Text style={styles.memberSince}>
             Member since {getMemberSince(profile.createdAt)}
           </Text>
@@ -260,6 +269,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xxl,
     fontWeight: '800',
     color: Colors.textPrimary,
+  },
+  emailText: {
+    fontSize: FontSize.sm,
+    color: Colors.neonCyan,
+    marginTop: 4,
   },
   memberSince: {
     fontSize: FontSize.sm,

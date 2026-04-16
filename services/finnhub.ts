@@ -1,7 +1,7 @@
 // Finnhub API Service — Real-time stock data
 // Sign up at https://finnhub.io/ for a free API key
 
-const API_KEY = 'd76ot29r01qtg3nee000d76ot29r01qtg3nee00g'; // Replace with your Finnhub API key
+const API_KEY = process.env.EXPO_PUBLIC_FINNHUB_API_KEY || '';
 const BASE_URL = 'https://finnhub.io/api/v1';
 
 export interface StockQuote {
