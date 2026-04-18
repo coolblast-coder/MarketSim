@@ -243,8 +243,8 @@ export default function LoginScreen() {
       style={styles.container}
     >
       {/* Floating particles */}
-      {particles.map(p => (
-        <Particle key={p.key} {...p} />
+      {particles.map(({ key, ...rest }) => (
+        <Particle key={key} {...rest} />
       ))}
 
       <KeyboardAvoidingView
