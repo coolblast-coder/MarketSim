@@ -15,7 +15,9 @@ import GlassCard from '../../components/GlassCard';
 import NeonButton from '../../components/NeonButton';
 import {
   getUserProfile,
+  saveUserProfile,
   getBalance,
+  setBalance as setBalanceDb,
   getTransactions,
   getPositions,
   resetAllData,
@@ -41,21 +43,41 @@ export default function ProfileScreen() {
   );
 
   async function loadProfile() {
-    const [p, bal, txs, positions] = await Promise.all([
-      getUserProfile(),
-      getBalance(),
-      getTransactions(),
-      getPositions(),
-    ]);
-    setProfile(p);
-    setBalance(bal);
-    setTradeCount(txs.length);
-    setPosCount(positions.length);
+    try {
+      // Get session first for email + metadata fallback
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        setEmail(session.user.email);
+      }
 
-    // Get email from Supabase session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.email) {
-      setEmail(session.user.email);
+      // Load profile — auto-create if missing
+      let p = await getUserProfile();
+      if (!p && session?.user) {
+        const meta = session.user.user_metadata;
+        const name = meta?.username || session.user.email?.split('@')[0] || 'Trader';
+        p = await saveUserProfile(name);
+      }
+      setProfile(p);
+
+      // Load balance — auto-create if missing (returns 0 when no row)
+      let bal = await getBalance();
+      if (bal === 0 && session?.user) {
+        const meta = session.user.user_metadata;
+        const startingBal = meta?.starting_balance || 10000;
+        await setBalanceDb(startingBal);
+        bal = startingBal;
+      }
+      setBalance(bal);
+
+      // Load counts (these are fine to be 0/empty)
+      const [txs, positions] = await Promise.all([
+        getTransactions(),
+        getPositions(),
+      ]);
+      setTradeCount(txs.length);
+      setPosCount(positions.length);
+    } catch (err) {
+      console.warn('Profile load error:', err);
     }
   }
 

@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { Colors, FontSize, Spacing, Shadows } from '../constants/theme';
 import GlassCard from '../components/GlassCard';
 import NeonButton from '../components/NeonButton';
-import { saveUserProfile, setBalance } from '../services/storage';
+import { saveUserProfile, setBalance, getUserProfile, getBalance } from '../services/storage';
 import { supabase } from '../services/supabase';
 
 const { width, height } = Dimensions.get('window');
@@ -144,6 +144,12 @@ export default function LoginScreen() {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password: password.trim(),
+        options: {
+          data: {
+            username: username.trim(),
+            starting_balance: balanceNum,
+          },
+        },
       });
 
       if (signUpError) {
@@ -152,19 +158,38 @@ export default function LoginScreen() {
         return;
       }
 
-      // If Supabase has email confirmation disabled, session is available immediately
+      // If session is available immediately (email confirmation disabled)
       if (data.session) {
-        await saveUserProfile(username.trim());
-        await setBalance(balanceNum);
+        await ensureProfileAndBalance(username.trim(), balanceNum);
         router.replace('/(tabs)');
       } else {
-        // Email confirmation is enabled – tell user to check inbox
+        // Email confirmation is required
         setError('Check your email for a confirmation link, then sign in.');
         setLoading(false);
       }
     } catch (e) {
       setError('Something went wrong. Try again.');
       setLoading(false);
+    }
+  };
+
+  // Ensure profile + balance rows exist (idempotent)
+  const ensureProfileAndBalance = async (name: string, bal: number) => {
+    try {
+      const existingProfile = await getUserProfile();
+      if (!existingProfile) {
+        await saveUserProfile(name);
+      }
+    } catch {
+      await saveUserProfile(name);
+    }
+    try {
+      const existingBal = await getBalance();
+      if (existingBal === 0) {
+        await setBalance(bal);
+      }
+    } catch {
+      await setBalance(bal);
     }
   };
 
@@ -178,7 +203,7 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
       });
@@ -188,6 +213,13 @@ export default function LoginScreen() {
         setLoading(false);
         return;
       }
+
+      // Auto-create profile + balance if they don't exist yet
+      // (happens when user signed up with email confirmation enabled)
+      const meta = data.user?.user_metadata;
+      const name = meta?.username || email.trim().split('@')[0];
+      const bal = meta?.starting_balance || 10000;
+      await ensureProfileAndBalance(name, bal);
 
       router.replace('/(tabs)');
     } catch (e) {
